@@ -100,7 +100,7 @@ class Compiler
             $this -> namespaces[$namespace] = [];
         }
         
-        if($file -> basename() === 'IXmlFile')
+        if($file -> basename() === 'Linq')
         {
             file_put_contents($file -> basename().'.txt', print_r($tokens, true));
         }
@@ -110,6 +110,10 @@ class Compiler
         ];
     }
     
+    /**
+     * @param array $tokens
+     * @return array
+     */
     private function getNamespaceRequirements(array $tokens): array
     {
         $buffer = [];
@@ -203,6 +207,9 @@ class Compiler
         $constants = $this -> translateConstants($tokens);
         $this -> updateConstants($tokens, $constants);
         
+        $methods = $this -> translateMethods($tokens);
+        $this -> updatePrivateMethods($tokens, $methods);
+        
         $this -> updateMethods($tokens);
         $this -> stripInformationAfter($tokens);
         $this -> stripDocComments($tokens);
@@ -210,6 +217,35 @@ class Compiler
         $this -> reSpace($tokens);
         
         return $this -> buildStream($tokens);
+    }
+    
+    /**
+     * @param array $tokens
+     * @return array
+     */
+    private function translateMethods(array &$tokens): array
+    {
+        $buffer = [];
+        
+        $inClass = false;
+        
+        foreach($tokens as $idx => $token)
+        {
+            if(!is_array($token))
+            {
+            }
+            else if(!$inClass && $token[0] === 369)
+            {
+                $inClass = true;
+            }
+            else if($inClass && $token[0] === 360 && $tokens[$idx + 2][0] === 347 && substr($tokens[$idx + 4][1], 0, 2) !== '__')
+            {
+                $method = $tokens[$idx + 4][1];
+                $buffer[$method] = $this -> getNewAddress();
+            }
+        }
+        
+        return $buffer;
     }
     
     /**
@@ -316,6 +352,62 @@ class Compiler
         
         $tokens = array_values($tokens);
     }
+    
+    /**
+     * @param array $tokens
+     * @param array $methods
+     * @return void
+     */
+    private function updatePrivateMethods(array &$tokens, array $methods): void
+    {
+        $remove = [];
+        
+        foreach($tokens as $idx => $token)
+        {
+            if(!is_array($token))
+            {
+                continue;
+            }
+            else if($token[0] == 317)
+            {
+                while(is_array($tokens[$idx]) && $tokens[$idx][0] !== 313)
+                {
+                    if($tokens[$idx][0] === 397)
+                    {
+                        $remove[] = $idx;
+                    }
+                    $idx++;
+                }
+                if(is_array($tokens[$idx]) && isset($methods[$tokens[$idx][1]]))
+                {
+                    $tokens[$idx][1] = $methods[$tokens[$idx][1]]; 
+                }
+            }
+            else if($token[0] == 347)
+            {
+                while(is_array($tokens[$idx]) && $tokens[$idx][0] !== 313)
+                {
+                    if($tokens[$idx][0] === 397)
+                    {
+                        $remove[] = $idx;
+                    }
+                    $idx++;
+                }
+                if(is_array($tokens[$idx]) && isset($methods[$tokens[$idx][1]]))
+                {
+                    $tokens[$idx][1] = ' '.$methods[$tokens[$idx][1]]; 
+                }
+            }
+        }
+        
+        foreach($remove as $idx)
+        {
+            unset($tokens[$idx]);
+        }
+        
+        $tokens = array_values($tokens);
+    }
+    
     
     /**
      * @param array $tokens
