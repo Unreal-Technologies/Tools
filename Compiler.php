@@ -401,7 +401,7 @@ class Compiler
      * @param array $tokens
      * @return array
      */
-    private function translateConstants(array $tokens): array
+    private function translateConstants(array &$tokens): array
     {
         $buffer = [];
         
@@ -804,19 +804,31 @@ class Compiler
             {
                 $isStatic = false;
                 $memberStart = $idx;
+                
                 while($tokens[$idx][0] !== 317)
                 {
                     if(is_array($tokens[$idx]) && $tokens[$idx][1] === 'static')
                     {
                         $isStatic = true;
                     }
+                    else if(is_array($tokens[$idx]) && $tokens[$idx][0] === 347)
+                    {
+                        $inMethod = true;
+                        break;
+                    }
                     
                     $idx++;
                 }
                 
+                if($inMethod)
+                {
+                    continue;
+                }
+                
                 $var = $tokens[$idx][1];
+                
                 $address = $this -> getNewAddress();
-                //$tokens[$idx][1] = '$'.$address;
+                $tokens[$idx][1] = '$'.$address;
                 
                 if($isStatic)
                 {
