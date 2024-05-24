@@ -99,11 +99,7 @@ class Compiler
         {
             $this -> namespaces[$namespace] = [];
         }
-        
-        if($file -> basename() === 'Linq')
-        {
-            file_put_contents($file -> basename().'.txt', print_r($tokens, true));
-        }
+
         $this -> namespaces[$namespace][$file -> basename()] = [
             'Requires' => $this -> getNamespaceRequirements($tokens),
             'Stream' => $this -> obfusicate($tokens)
@@ -395,7 +391,7 @@ class Compiler
                 }
                 if(is_array($tokens[$idx]) && isset($methods[$tokens[$idx][1]]))
                 {
-                    $tokens[$idx][1] = ' '.$methods[$tokens[$idx][1]]; 
+                    $tokens[$idx][1] = $methods[$tokens[$idx][1]]; 
                 }
             }
         }
@@ -407,8 +403,7 @@ class Compiler
         
         $tokens = array_values($tokens);
     }
-    
-    
+
     /**
      * @param array $tokens
      * @return void
@@ -454,7 +449,7 @@ class Compiler
      */
     private function reSpace(array &$tokens): void
     {
-        $list = [ 'as' ];
+        $list = [ 'as', 'function' ];
         
         foreach($tokens as $idx => $token)
         {
@@ -471,7 +466,7 @@ class Compiler
      */
     private function stripInformationAfter(array &$tokens): void
     {
-        $list = ['{', '}', '(', ')', ';', '=', '.', ':', ',', '?', '+=', '==', '!==', '===', '/', '[', ']', '-', '*', '&&', '+', '->', 'as', '=>'];
+        $list = ['{', '}', '(', ')', ';', '=', '.', ':', ',', '?', '+=', '==', '!==', '===', '/', '[', ']', '-', '*', '&&', '+', '->', 'as', '=>', 'function'];
         $remove = [];
         
         foreach($tokens as $idx => $token)
