@@ -57,8 +57,161 @@ class Compiler
         $this -> namespaces = [];
         $this -> address = 0;
         $this -> itterate($this -> source);
+        $this -> namespaceComposer();
         
         file_put_contents('namespaces.txt', print_r($this -> namespaces, true));
+    }
+    
+    /**
+     * @param string|null $namespace
+     * @return void
+     */
+    private function namespaceComposer(?string $namespace = null): void
+    {
+        if($namespace === null)
+        {
+            foreach(array_keys($this -> namespaces) as $ns)
+            {
+                $this -> namespaceComposer($ns);
+            }
+            return;
+        }
+        
+        $ordering = $this -> namespaceOrdering($namespace);
+        
+        $stream = '<?php ';
+        $stream .= 'namespace '.$namespace.';';
+        
+        $ns = $this -> namespaces[$namespace];
+        foreach($ordering as $cls)
+        {
+            $stream .= $ns[$cls]['Stream'];
+        }
+        
+        $file = \UT_Php_Core\IO\File::fromDirectory($this -> work, str_replace('\\', '+', $namespace).'.php');
+        $file -> write($stream);
+    }
+    
+    /**
+     * @param string $namespace
+     * @return array
+     */
+    private function namespaceOrdering(string $namespace): array
+    {
+        $ns = $this -> namespaces[$namespace];
+        
+        $requirements = [];
+        $nullRequirements = [];
+        foreach($ns as $class => $data)
+        {
+            if(count($data['Requires']) > 0)
+            {
+                $requirements[$class] = $data['Requires'];
+            }
+            else
+            {
+                $nullRequirements[] = $class;
+            }
+        }
+        if(count($requirements) === 0)
+        {
+            return $nullRequirements;
+        }
+        
+        $allInNullRequirements = true;
+        foreach($requirements as $req)
+        {
+            foreach($req as $cls)
+            {
+                if(!in_array($cls, $nullRequirements))
+                {
+                    $allInNullRequirements = false;
+                }
+            }
+        }
+        
+        if($allInNullRequirements)
+        {
+            foreach(array_keys($requirements) as $class)
+            {
+                $nullRequirements[] = $class;
+            }
+            
+            return $nullRequirements;
+        }
+        
+        $dependants = [];
+        foreach($requirements as $class => $req)
+        {
+            foreach($req as $cls)
+            {
+                if(!isset($dependants[$cls]))
+                {
+                    $dependants[$cls] = [];
+                }
+                $dependants[$cls][] = $class;
+            }
+        }
+        
+        $positions = [];
+        $sum = -1;
+        $offset = 0;
+
+        while($sum < array_sum($positions))
+        {
+            $sum = array_sum($positions);
+            foreach(array_keys($dependants) as $c1)
+            {
+                if(isset($positions[$c1]) && $positions[$c1] < $offset)
+                {
+                    continue;
+                }
+
+                if(!isset($positions[$c1]))
+                {
+                    $positions[$c1] = 0;
+                }
+                
+                foreach($dependants as $c2 => $d2)
+                {
+                    if($c1 === $c2)
+                    {
+                        continue;
+                    }
+
+                    if(!isset($positions[$c2]))
+                    {
+                        $positions[$c2] = 0;
+                    }
+                    
+                    if(in_array($c1, $d2))
+                    {
+                        $positions[$c1] = $positions[$c2] + 1;
+                    }
+                }
+            }
+            $offset++;
+        }
+        
+        $iPositions = [];
+        foreach($positions as $cls => $value)
+        {
+            if(!isset($iPositions[$value]))
+            {
+                $iPositions[$value] = [];
+            }
+            
+            $children = $dependants[$cls];
+            $iPositions[$value] = array_merge($iPositions[$value], $children);
+        }
+        ksort($iPositions);
+        
+        foreach($iPositions as $list)
+        {
+            $nullRequirements = array_merge($nullRequirements, $list);
+        }
+        
+        return $nullRequirements;
     }
     
     /**
@@ -99,7 +252,7 @@ class Compiler
         {
             $this -> namespaces[$namespace] = [];
         }
-
+        
         $this -> namespaces[$namespace][$file -> basename()] = [
             'Requires' => $this -> getNamespaceRequirements($tokens),
             'Stream' => $this -> obfusicate($tokens)
@@ -206,7 +359,7 @@ class Compiler
         $methods = $this -> translateMethods($tokens);
         $this -> updatePrivateMethods($tokens, $methods);
         
-        $this -> updateMethods($tokens);
+        $this -> updateMethods($tokens, $members);
         $this -> stripInformationAfter($tokens);
         $this -> stripDocComments($tokens);
         $this -> stripDocOpenAndNamespace($tokens);
@@ -219,7 +372,7 @@ class Compiler
      * @param array $tokens
      * @return array
      */
-    private function translateMethods(array &$tokens): array
+    private function translateMethods(array $tokens): array
     {
         $buffer = [];
         
@@ -248,7 +401,7 @@ class Compiler
      * @param array $tokens
      * @return array
      */
-    private function translateConstants(array &$tokens): array
+    private function translateConstants(array $tokens): array
     {
         $buffer = [];
         
@@ -449,7 +602,7 @@ class Compiler
      */
     private function reSpace(array &$tokens): void
     {
-        $list = [ 'as', 'function' ];
+        $list = [ 'as', 'function', 'instanceof' ];
         
         foreach($tokens as $idx => $token)
         {
@@ -466,7 +619,7 @@ class Compiler
      */
     private function stripInformationAfter(array &$tokens): void
     {
-        $list = ['{', '}', '(', ')', ';', '=', '.', ':', ',', '?', '+=', '==', '!==', '===', '/', '[', ']', '-', '*', '&&', '+', '->', 'as', '=>', 'function'];
+        $list = ['{', '}', '(', ')', ';', '=', '.', ':', ',', '?', '+=', '==', '!==', '===', '/', '[', ']', '-', '*', '&&', '+', '->', 'as', '=>', 'function', 'instanceof'];
         $remove = [];
         
         foreach($tokens as $idx => $token)
@@ -503,7 +656,7 @@ class Compiler
     /**
      * @param array $tokens
      */
-    private function updateMethods(array &$tokens)
+    private function updateMethods(array &$tokens, array $members)
     {
         $inMethod = false;
         $inClass = false;
@@ -551,7 +704,7 @@ class Compiler
             {
                 $parameters[] = $token[1];
             }
-            else if($inMethod && $methodDepth >= 1 && $token[0] === 317 && !in_array($token[1], $parameters) && $token[1] !== '$this')
+            else if($inMethod && $methodDepth >= 1 && $token[0] === 317 && !in_array($token[1], $parameters) && $token[1] !== '$this' && !in_array($token[1], $members))
             {
                 $var = $token[1];
                 if(!isset($replaced[$var]))
@@ -581,17 +734,22 @@ class Compiler
             }
             else if($token[0] == 317)
             {
-                while(is_array($tokens[$idx]) && $tokens[$idx][0] !== 313)
+                $i = $idx;
+                while(is_array($tokens[$i]) && $tokens[$i][0] !== 313)
                 {
                     if($tokens[$idx][0] === 397)
                     {
-                        $remove[] = $idx;
+                        $remove[] = $i;
                     }
-                    $idx++;
+                    $i++;
                 }
-                if(is_array($tokens[$idx]) && isset($members[$tokens[$idx][1]]))
+                if(is_array($tokens[$i]) && isset($members[$tokens[$i][1]]) && $tokens[$i + 1] !== '(')
                 {
-                    $tokens[$idx][1] = $members[$tokens[$idx][1]]; 
+                    $tokens[$i][1] = $members[$tokens[$i][1]]; 
+                }
+                else if(is_array($token) && isset($members[$token[1]]))
+                {
+                    $tokens[$idx][1] = $members[$token[1]]; 
                 }
             }
         }
@@ -644,16 +802,27 @@ class Compiler
             }
             else if($inClass && !$inMethod && $token[0] === 360)
             {
+                $isStatic = false;
                 $memberStart = $idx;
                 while($tokens[$idx][0] !== 317)
                 {
+                    if(is_array($tokens[$idx]) && $tokens[$idx][1] === 'static')
+                    {
+                        $isStatic = true;
+                    }
+                    
                     $idx++;
                 }
                 
                 $var = $tokens[$idx][1];
                 $address = $this -> getNewAddress();
-                $tokens[$idx][1] = '$'.$address;
+                //$tokens[$idx][1] = '$'.$address;
                 
+                if($isStatic)
+                {
+                    $buffer[$var] = '$'.$address;
+                    continue;
+                }
                 $buffer[substr($var, 1)] = $address;
             }
         }
