@@ -1,6 +1,6 @@
 <?php
-require_once('../PllLoader.php');
-PllLoader::initialize('UT.Php.Core:1.0.0.0');
+require_once('../PllLoader/PllLoader.php');
+PllLoader::initialize('UT.Php.Core:1.0.0.0', '../');
 
 class Compiler
 {
