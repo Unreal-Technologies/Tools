@@ -58,8 +58,6 @@ class Compiler
         $this -> address = 0;
         $this -> itterate($this -> source);
         $this -> namespaceComposer();
-        
-        file_put_contents('namespaces.txt', print_r($this -> namespaces, true));
     }
     
     /**
@@ -826,6 +824,10 @@ class Compiler
                 }
                 
                 $var = $tokens[$idx][1];
+                if(preg_match('/^\$a[0-9a-f]{4}$/i', $var))
+                {
+                    continue;
+                }
                 
                 $address = $this -> getNewAddress();
                 $tokens[$idx][1] = '$'.$address;
