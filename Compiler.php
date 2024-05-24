@@ -590,7 +590,7 @@ class Compiler
     private function stripDocOpenAndNamespace(array &$tokens): void
     {
         $classStart = (new UT_Php_Core\Collections\Linq($tokens))
-            ->firstOrDefault(function($x) { return is_array($x) && ($x[0] === 369 || $x[0] === 372 || $x[0] === 371); });
+            ->firstOrDefault(function($x) { return is_array($x) && ($x[0] === 369 || $x[0] === 372 || $x[0] === 371 || $x[0] === 358); });
         $classStartIndex = array_search($classStart, $tokens);    
   
         $tokens = array_slice($tokens, $classStartIndex);
@@ -704,7 +704,7 @@ class Compiler
             {
                 $parameters[] = $token[1];
             }
-            else if($inMethod && $methodDepth >= 1 && $token[0] === 317 && !in_array($token[1], $parameters) && $token[1] !== '$this' && !in_array($token[1], $members))
+            else if($inMethod && $methodDepth >= 1 && $token[0] === 317 && !in_array($token[1], $parameters) && $token[1] !== '$this' && substr($token[1], 0, 2) !== '$_' && !in_array($token[1], $members))
             {
                 $var = $token[1];
                 if(!isset($replaced[$var]))
