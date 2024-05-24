@@ -100,14 +100,95 @@ class Compiler
             $this -> namespaces[$namespace] = [];
         }
         
-        if($file -> basename() === 'IBmpFile')
+        if($file -> basename() === 'IXmlFile')
         {
             file_put_contents($file -> basename().'.txt', print_r($tokens, true));
         }
         $this -> namespaces[$namespace][$file -> basename()] = [
-            'Requires' => null,
+            'Requires' => $this -> getNamespaceRequirements($tokens),
             'Stream' => $this -> obfusicate($tokens)
         ];
+    }
+    
+    private function getNamespaceRequirements(array $tokens): array
+    {
+        $buffer = [];
+        $hasMatch = false;
+        
+        foreach($tokens as $idx => $token)
+        {
+            if(($token[0] === 369 || $token[0] === 371) && !$hasMatch)
+            {
+                $hasMatch = true;
+                
+                $extends = null;
+                $interfaces = [];
+                
+                $s = $idx + 3;
+                while($tokens[$idx] !== '{')
+                {
+                    $idx++;
+                }
+                $e = $idx - 1;
+                
+                $segment = array_slice($tokens, $s, $e - $s);
+                if(count($segment) !== 0)
+                {
+                    foreach($segment as $sIdx => $part)
+                    {
+                        if(is_array($part) && $part[0] === 373)
+                        {
+                            while(isset($segment[$sIdx]) && $segment[$sIdx][0] !== 313)
+                            {
+                                $sIdx++;
+                            }
+                            
+                            if(isset($segment[$sIdx]) && $this -> isSameNamespace($segment[$sIdx][1]))
+                            {
+                                $extends = $segment[$sIdx][1];
+                            }
+                        }
+                        
+                        if(is_array($part) && $part[0] === 374)
+                        {
+                            while(isset($segment[$sIdx]))
+                            {
+                                if(($segment[$sIdx][0] === 314 || $segment[$sIdx][0] === 313) && $this -> isSameNamespace($segment[$sIdx][1]))
+                                {
+                                    $interfaces[] = $segment[$sIdx][1];
+                                }
+                                $sIdx++;
+                            }
+                        }
+                    }
+                
+                    if($extends !== null || count($interfaces) !== 0)
+                    {
+                        $buffer = $interfaces;
+                        if($extends !== null)
+                        {
+                            $buffer[] = $extends;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return $buffer;
+    }
+    
+    /**
+     * @param string $object
+     * @return bool
+     */
+    private function isSameNamespace(string $object): bool
+    {
+        if($object[0] === '\\')
+        {
+            return false;
+        }
+        
+        return true;
     }
     
     /**
