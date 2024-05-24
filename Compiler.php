@@ -61,18 +61,85 @@ class Compiler
     }
     
     /**
+     * @param int $value
+     * @return string
+     */
+    private function encodeInt(int $value, int $len=null): string
+    {
+        $bin = decbin($value);
+        $bytes = [];
+        for($i=0; $i<strlen($bin); $i +=8)
+        {
+            $bytes[] = chr(bindec(substr($bin, $i, 8)));
+        }
+        
+        if($len !== null)
+        {
+            $padding = array_fill(0, $len - count($bytes), chr(0));
+            $bytes = array_merge($padding, $bytes);
+        }
+        
+        return implode('', $bytes);
+    }
+    
+    /**
+     * @param UT_Php_Core\Version $version
+     * @return type
+     */
+    private function encodeVersion(UT_Php_Core\Version $version)
+    {
+        $v1 = $this -> encodeInt($version -> major());
+        $v2 = $this -> encodeInt($version -> minor());
+        $v3 = $this -> encodeInt($version -> patch());
+        $v4 = $this -> encodeInt($version -> build());
+        
+        $padLen = (int)max([strlen($v1), strlen($v2), strlen($v3), strlen($v4)]);
+        if($padLen > 1)
+        {
+            $v1 = str_pad($v1, $padLen, chr(0), 0);
+            $v2 = str_pad($v1, $padLen, chr(0), 0);
+            $v3 = str_pad($v1, $padLen, chr(0), 0);
+            $v4 = str_pad($v1, $padLen, chr(0), 0);
+        }
+        
+        return $this -> encodeInt($padLen).$v1.$v2.$v3.$v4;
+    }
+    
+    /**
      * @param string|null $namespace
      * @return void
      */
-    private function namespaceComposer(?string $namespace = null): void
+    private function namespaceComposer(?string $namespace = null): \UT_Php_Core\IO\File
     {
         if($namespace === null)
         {
+            $map = [
+                'Version' => '1.0.0.0',
+                'Namespaces' => [],
+                'Stream' => ''
+            ];
+            
             foreach(array_keys($this -> namespaces) as $ns)
             {
-                $this -> namespaceComposer($ns);
+                $file = $this -> namespaceComposer($ns);
+                $bin = $file -> content();
+                
+                $map['Namespaces'][$ns] = strlen($bin);
+                $map['Stream'] .= $bin;
             }
-            return;
+            
+            $version = new UT_Php_Core\Version(1, 0, 0, 0);
+            $namespaces = gzencode(json_encode($map['Namespaces']));
+            
+            $output = \UT_Php_Core\IO\File::fromDirectory($this -> source -> parent() -> parent(), $this -> name.'.pll');
+            $output -> write(
+                $this -> encodeVersion($version).
+                $this -> encodeInt(strlen($namespaces), 4).
+                $namespaces.
+                $map['Stream']
+            );
+            
+            return $output;
         }
         
         $ordering = $this -> namespaceOrdering($namespace);
@@ -86,8 +153,10 @@ class Compiler
             $stream .= $ns[$cls]['Stream'];
         }
         
-        $file = \UT_Php_Core\IO\File::fromDirectory($this -> work, str_replace('\\', '+', $namespace).'.php');
-        $file -> write($stream);
+        $file = \UT_Php_Core\IO\File::fromDirectory($this -> work, str_replace('\\', '+', $namespace).'.gz');
+        $file -> write(gzencode($stream));
+        
+        return $file;
     }
     
     /**
