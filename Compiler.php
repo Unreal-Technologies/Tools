@@ -1,9 +1,11 @@
 <?php
 require_once('../PllLoader/PllLoader.php');
-PllLoader::initialize('UT.Php.Core:1.0.0.0', '../');
+echo 'Loaded: UT.Php.Core version '.PllLoader::initialize('UT.Php.Core:1.0.0.0', '../')."\r\n";
 
 class Compiler
 {
+    private const DEFAULT_VERSION = '1.0.0.0';
+    
     /** 
      * @var \UT_Php_Core\IO\Directory
      */
@@ -38,14 +40,26 @@ class Compiler
         global $argv;
         
         $name = $argv[1];
-        $dir = \UT_Php_Core\IO\Directory::fromString('../'.$name.'/Sources');
+        $dir = \UT_Php_Core\IO\Directory::fromString('../'.$name);
         
         if(!$dir -> exists())
         {
             throw new \UT_Php_Core\Exceptions\ArgumentException('Name of Library "'.$name.'" is not found on disk');
         }
+        $version = null;
+        $versionFile = \UT_Php_Core\IO\File::fromDirectory($dir, '.version');
+        if($versionFile -> exists())
+        {
+            $version = UT_Php_Core\Version::parse($versionFile -> content());
+            $version -> increment();
+        }
+        else
+        {
+            $versionFile -> write(self::DEFAULT_VERSION);
+            $version = UT_Php_Core\Version::parse($versionFile -> content());
+        }
         
-        $this -> name = $dir -> parent() -> name();
+        $this -> name = $dir -> name();
 
         $this -> source = $dir;
         $this -> work = \UT_Php_Core\IO\Directory::fromString('Work');
@@ -57,7 +71,10 @@ class Compiler
         $this -> namespaces = [];
         $this -> address = 0;
         $this -> itterate($this -> source);
-        $this -> namespaceComposer();
+        $output = $this -> namespaceComposer($version);
+
+        echo 'Data written to "'.$output -> path().'"'."\r\n";
+        $versionFile -> write($version);
     }
     
     /**
@@ -109,29 +126,27 @@ class Compiler
      * @param string|null $namespace
      * @return void
      */
-    private function namespaceComposer(?string $namespace = null): \UT_Php_Core\IO\File
+    private function namespaceComposer(?UT_Php_Core\Version $version, ?string $namespace = null): \UT_Php_Core\IO\File
     {
         if($namespace === null)
         {
             $map = [
-                'Version' => '1.0.0.0',
                 'Namespaces' => [],
                 'Stream' => ''
             ];
             
             foreach(array_keys($this -> namespaces) as $ns)
             {
-                $file = $this -> namespaceComposer($ns);
+                $file = $this -> namespaceComposer(null, $ns);
                 $bin = $file -> content();
                 
                 $map['Namespaces'][$ns] = strlen($bin);
                 $map['Stream'] .= $bin;
             }
             
-            $version = new UT_Php_Core\Version(1, 0, 0, 0);
             $namespaces = gzencode(json_encode($map['Namespaces']));
             
-            $output = \UT_Php_Core\IO\File::fromDirectory($this -> source -> parent() -> parent(), $this -> name.'.pll');
+            $output = \UT_Php_Core\IO\File::fromDirectory($this -> source -> parent(), $this -> name.'.pll');
             $output -> write(
                 $this -> encodeVersion($version).
                 $this -> encodeInt(strlen($namespaces), 4).
@@ -289,6 +304,11 @@ class Compiler
     {
         foreach($current -> list() as $entry)
         {
+            if(preg_match('/^\./', $entry -> name()))
+            {
+                continue;
+            }
+            
             if($entry instanceof \UT_Php_Core\IO\File && $entry -> extension() === 'php')
             {
                 $this -> translateToNamespace($entry);
@@ -299,7 +319,7 @@ class Compiler
             }
             else
             {
-                var_dumP($entry -> path());
+                throw new \UT_Php_Core\Exceptions\UndefinedException('Found undefined file "'.$entry -> path().'" in library directory');
             }
         }
     }
@@ -968,4 +988,11 @@ class Compiler
     }
 }
 
-new Compiler();
+try
+{
+    new Compiler();
+}
+catch(\UT_Php_Core\Exceptions\UndefinedException $uex)
+{
+    echo 'Error: '.$uex -> getMessage()."\r\n\r\n";
+}
