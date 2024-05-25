@@ -67,11 +67,33 @@ class Compiler
         $this -> address = 0;
         $this -> itterate($this -> source);
         $output = $this -> namespaceComposer($version);
+        $this -> cleanup($this -> work);
 
         echo 'Data written to "' . $output -> path() . '"' . "\r\n";
         $versionFile -> write($version);
+        
     }
 
+    /**
+     * @param \UT_Php_Core\IO\Directory $directory
+     * @return void
+     */
+    private function cleanup(\UT_Php_Core\IO\Directory $directory): void 
+    {
+        foreach($directory -> list() as $entry)
+        {
+            if($entry instanceof \UT_Php_Core\IO\Directory)
+            {
+                $this -> cleanup($entry);
+            }
+            else if($entry instanceof \UT_Php_Core\IO\File)
+            {
+                $entry -> remove();
+            }
+        }
+        $directory -> remove();
+    }
+    
     /**
      * @param int $value
      * @return string
