@@ -123,11 +123,13 @@ class MdBuilder
             $this -> data[$ns] = [];
         }
         
-        $isClass = $this -> isClass($tokens);
-        $isInterface = $this -> isInterface($tokens);
-        $isEnum = $this -> isEnum($tokens);
-        
-        if(!$isClass && !$isInterface && !$isEnum)
+        $object = $file -> object();
+        $isClass = $object -> isClass();
+        $isInterface = $object -> isInterface();
+        $isEnum = $object -> isEnum();
+        $isTrait = $object -> isTrait();
+
+        if(!$isClass && !$isInterface && !$isEnum && !$isTrait)
         {
             throw new \Exception('Unknown content in "'.$file -> path().'"');
         }
@@ -144,13 +146,111 @@ class MdBuilder
         {
             $this -> data[$ns][] = $this -> parseClass($tokens);
         }
-        else
+        else if($isTrait)
         {
-            var_dump($file -> name());
-            var_dump($isClass);
-            var_dump($isInterface);
-            echo self::EOL;
+            $this -> data[$ns][] = $this -> parseTrait($tokens);
         }
+    }
+    
+    /**
+     * @param array $tokens
+     * @return string
+     */
+    private function parseTrait(array $tokens): string
+    {
+        $declaration = '';
+        $inClass = false;
+        $methods = [];
+        
+        foreach($tokens as $idx => $token)
+        {
+            if(is_array($token) && $token[0] === 370)
+            {
+                $ir = $idx - 1;
+                while(isset($tokens[$ir]) && $tokens[$ir] !== ';')
+                {
+                    if(is_array($tokens[$ir]) && $tokens[$ir][0] === 397 && $tokens[$ir][1] !== ' ')
+                    {
+                        $declaration .= ' ';
+                    }
+                    else if(is_array($tokens[$ir]))
+                    {
+                        $declaration .= $tokens[$ir][1];
+                    }
+                    else
+                    {
+                        $declaration .= $tokens[$ir];
+                    }
+                    $ir--;
+                }
+                
+                $i = $idx;
+                while(isset($tokens[$i]) && $tokens[$i] !== '{')
+                {
+                    if(is_array($tokens[$i]))
+                    {
+                        $declaration .= $tokens[$i][1];
+                    }
+                    else
+                    {
+                        $declaration .= $tokens[$i];
+                    }
+                    $i++;
+                }
+                $inClass = true;
+            }
+            else if(is_array($token) && $inClass && in_array($token[0], [362, 361]))
+            {
+                $method = '';
+                
+                $ir = $idx - 1;
+                while(isset($tokens[$ir]) && !in_array($tokens[$ir], ['{', '}', ';']))
+                {
+                    if(is_array($tokens[$ir]) && $tokens[$ir][0] === 393) { }
+                    else if(is_array($tokens[$ir]) && $tokens[$ir][0] === 397 && $tokens[$ir][1] !== ' ')
+                    {
+                        $method .= ' ';
+                    }
+                    else if(is_array($tokens[$ir]))
+                    {
+                        $method .= $tokens[$ir][1];
+                    }
+                    else
+                    {
+                        $method .= $tokens[$ir];
+                    }
+                    $ir--;
+                }
+                
+                $i = $idx;
+                while(isset($tokens[$i]) && !in_array($tokens[$i], ['{', ';']))
+                {
+                    if(is_array($tokens[$i]) && $tokens[$i][0] === 397 && $tokens[$i][1] !== ' ')
+                    {
+                        $method .= '';
+                    }
+                    else if(is_array($tokens[$i]))
+                    {
+                        $method .= $tokens[$i][1];
+                    }
+                    else
+                    {
+                        $method .= $tokens[$i];
+                    }
+                    $i++;
+                }
+                $methods[] = str_replace([',', ',  '], [', ', ', '], $method);
+            }
+        }
+        
+        $stream = trim($declaration).self::EOL;
+        $stream .= '{'.self::EOL;
+        foreach($methods as $method)
+        {
+            $stream .= self::TAB.trim($method).self::EOL;
+        }
+        $stream .= '}'.self::EOL;
+        return str_replace('  ', ' ', $stream);
     }
     
     /**
@@ -364,54 +464,6 @@ class MdBuilder
         return $stream;
     }
     
-    /**
-     * @param array $tokens
-     * @return bool
-     */
-    private function isEnum(array $tokens): bool
-    {
-        foreach($tokens as $token)
-        {
-            if(is_array($token) && $token[0] === 372)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    /**
-     * @param array $tokens
-     * @return bool
-     */
-    private function isInterface(array $tokens): bool
-    {
-        foreach($tokens as $token)
-        {
-            if(is_array($token) && $token[0] === 371)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    /**
-     * @param array $tokens
-     * @return bool
-     */
-    private function isClass(array $tokens): bool
-    {
-        foreach($tokens as $token)
-        {
-            if(is_array($token) && $token[0] === 369)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /**
      * @return void
      */
