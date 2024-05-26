@@ -31,7 +31,7 @@ class MdBuilder
      * @global array $argv
      * @throws \UT_Php_Core\Exceptions\ArgumentException
      */
-    function __construct()
+    public function __construct()
     {
         global $argv;
 
@@ -144,32 +144,31 @@ class MdBuilder
 
         $members = '';
         foreach (
-            (new \UT_Php_Core\Collections\Linq($file -> members())) 
+            (new \UT_Php_Core\Collections\Linq($file -> members()))
                 -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMember $x) {
-                return $x -> declaration();
-            }) -> toArray() as $member
+                    return $x -> declaration();
+                }) -> toArray() as $member
         ) {
             $members .= self::TAB . $member -> declaration() . ';' . self::EOL;
         }
-        
+
         $methods = '';
         foreach (
-            (new \UT_Php_Core\Collections\Linq($file -> methods())) 
+            (new \UT_Php_Core\Collections\Linq($file -> methods()))
                 -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMethod $x) {
-                return $x -> declaration();
-            }) -> toArray() as $method
+                    return $x -> declaration();
+                }) -> toArray() as $method
         ) {
             $methods .= self::TAB . $method -> declaration() . ';' . self::EOL;
         }
-        
+
         $stream .= $members;
-        if($members !== '' && $methods !== '')
-        {
+        if ($members !== '' && $methods !== '') {
             $stream .= self::EOL;
         }
         $stream .= $methods;
-        
-        
+
+
         $stream .= '}' . self::EOL;
 
         return $stream;
@@ -186,48 +185,44 @@ class MdBuilder
 
         $traits = '';
         foreach (
-            (new \UT_Php_Core\Collections\Linq($file -> traits())) 
+            (new \UT_Php_Core\Collections\Linq($file -> traits()))
                 -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenTrait $x) {
-                return $x -> declaration();
-            }) -> toArray() as $trait
+                    return $x -> declaration();
+                }) -> toArray() as $trait
         ) {
             $traits .= self::TAB . $trait -> declaration() . ';' . self::EOL;
         }
-        
+
         $members = '';
         foreach (
-            (new \UT_Php_Core\Collections\Linq($file -> members())) 
+            (new \UT_Php_Core\Collections\Linq($file -> members()))
                 -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMember $x) {
-                return $x -> declaration();
-            }) -> toArray() as $member
+                    return $x -> declaration();
+                }) -> toArray() as $member
         ) {
-            if(!$member -> isPrivate())
-            {
+            if (!$member -> isPrivate()) {
                 $members .= self::TAB . $member -> declaration() . ';' . self::EOL;
             }
         }
-        
+
         $methods = '';
         foreach (
-            (new \UT_Php_Core\Collections\Linq($file -> methods())) 
+            (new \UT_Php_Core\Collections\Linq($file -> methods()))
                 -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMethod $x) {
-                return $x -> declaration();
-            }) -> toArray() as $method
+                    return $x -> declaration();
+                }) -> toArray() as $method
         ) {
-            if(!$method -> isPrivate())
-            {
+            if (!$method -> isPrivate()) {
                 $methods .= self::TAB . $method -> declaration() . ';' . self::EOL;
             }
         }
-        
+
         $stream .= $traits;
-        if($traits !== '' && $members !== '')
-        {
+        if ($traits !== '' && $members !== '') {
             $stream .= self::EOL;
         }
         $stream .= $members;
-        if(($members !== '' && $methods !== '') || ($traits !== '' && $methods !== ''))
-        {
+        if (($members !== '' && $methods !== '') || ($traits !== '' && $methods !== '')) {
             $stream .= self::EOL;
         }
         $stream .= $methods;
@@ -246,17 +241,17 @@ class MdBuilder
         $stream .= '{' . self::EOL;
 
         foreach (
-            (new \UT_Php_Core\Collections\Linq($file -> methods())) 
+            (new \UT_Php_Core\Collections\Linq($file -> methods()))
                 -> where(function (\UT_Php_Core\IO\Common\Php\TokenMethod $x) {
-                return !$x -> isPrivate();
+                    return !$x -> isPrivate();
                 })
                 -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMethod $x) {
-                return $x -> declaration();
-            }) -> toArray() as $method
+                    return $x -> declaration();
+                }) -> toArray() as $method
         ) {
             $stream .= self::TAB . $method -> declaration() . ';' . self::EOL;
         }
-        
+
         $stream .= '}' . self::EOL;
 
         return $stream;
@@ -270,15 +265,16 @@ class MdBuilder
     {
         $stream = $file -> object() -> declaration() . self::EOL;
         $stream .= '{' . self::EOL;
-        
+
         foreach (
-            (new \UT_Php_Core\Collections\Linq($file -> cases())) -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenCase $x) {
+            (new \UT_Php_Core\Collections\Linq($file -> cases()))
+            -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenCase $x) {
                 return $x -> declaration();
             }) -> toArray() as $case
         ) {
             $stream .= self::TAB . $case -> declaration() . ';' . self::EOL;
         }
-        
+
         $stream .= '}' . self::EOL;
 
         return $stream;
