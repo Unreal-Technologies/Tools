@@ -71,29 +71,24 @@ class Compiler
 
         echo 'Data written to "' . $output -> path() . '"' . "\r\n";
         $versionFile -> write($version);
-        
     }
 
     /**
      * @param \UT_Php_Core\IO\Directory $directory
      * @return void
      */
-    private function cleanup(\UT_Php_Core\IO\Directory $directory): void 
+    private function cleanup(\UT_Php_Core\IO\Directory $directory): void
     {
-        foreach($directory -> list() as $entry)
-        {
-            if($entry instanceof \UT_Php_Core\IO\Directory)
-            {
+        foreach ($directory -> list() as $entry) {
+            if ($entry instanceof \UT_Php_Core\IO\Directory) {
                 $this -> cleanup($entry);
-            }
-            else if($entry instanceof \UT_Php_Core\IO\File)
-            {
+            } elseif ($entry instanceof \UT_Php_Core\IO\File) {
                 $entry -> remove();
             }
         }
         $directory -> remove();
     }
-    
+
     /**
      * @param int $value
      * @return string
@@ -369,7 +364,8 @@ class Compiler
 
                         if (is_array($part) && $part[0] === 374) {
                             while (isset($segment[$sIdx])) {
-                                if (($segment[$sIdx][0] === 314 || $segment[$sIdx][0] === 313) &&
+                                if (
+                                    ($segment[$sIdx][0] === 314 || $segment[$sIdx][0] === 313) &&
                                     $this -> isSameNamespace($segment[$sIdx][1])
                                 ) {
                                     $interfaces[] = $segment[$sIdx][1];
@@ -443,7 +439,8 @@ class Compiler
             if (!is_array($token)) {
             } elseif (!$inClass && $token[0] === 369) {
                 $inClass = true;
-            } elseif ($inClass &&
+            } elseif (
+                $inClass &&
                 $token[0] === 360 &&
                 $tokens[$idx + 2][0] === 347 &&
                 substr($tokens[$idx + 4][1], 0, 2) !== '__'
@@ -590,7 +587,8 @@ class Compiler
 
         $remove = [];
         foreach ($tokens as $idx => $token) {
-            if (is_array($token) &&
+            if (
+                is_array($token) &&
                 in_array($token[0], $list) &&
                 $tokens[$idx - 1][0] === 397 &&
                 $tokens[$idx - 2][0] === 393
@@ -658,7 +656,8 @@ class Compiler
                 $remove[] = $idx - 1;
             }
 
-            if (is_array($token) &&
+            if (
+                is_array($token) &&
                 in_array($token[1], $list) &&
                 is_array($tokens[$idx + 1]) &&
                 $tokens[$idx + 1][0] === 397
@@ -666,7 +665,8 @@ class Compiler
                 $remove[] = $idx + 1;
             }
 
-            if (is_array($token) &&
+            if (
+                is_array($token) &&
                 in_array($token[1], $list) &&
                 is_array($tokens[$idx - 1]) &&
                 $tokens[$idx - 1][0] === 397
@@ -716,7 +716,8 @@ class Compiler
                 $inMethod = true;
             } elseif ($inParameters && $token[0] === 317) {
                 $parameters[] = $token[1];
-            } elseif ($inMethod &&
+            } elseif (
+                $inMethod &&
                 $methodDepth >= 1 &&
                 $token[0] === 317 &&
                 !in_array($token[1], $parameters) &&
