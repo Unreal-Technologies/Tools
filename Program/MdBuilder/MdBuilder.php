@@ -127,175 +127,113 @@ class MdBuilder
         } elseif ($isInterface) {
             $this -> data[$ns][] = $this -> parseInterface($file);
         } elseif ($isClass) {
-//            print_r($file);
-//            $this -> data[$ns][] = $this -> parseClass($tokens);
+            $this -> data[$ns][] = $this -> parseClass($file);
         } elseif ($isTrait) {
-//            print_r($file);
-//            $this -> data[$ns][] = $this -> parseTrait($tokens);
+            $this -> data[$ns][] = $this -> parseTrait($file);
         }
     }
 
     /**
-     * @param array $tokens
+     * @param \UT_Php_Core\Interfaces\IPhpFile $file
      * @return string
      */
-    private function parseTrait(array $tokens): string
+    private function parseTrait(\UT_Php_Core\Interfaces\IPhpFile $file): string
     {
-        $declaration = '';
-        $inTrait = false;
-        $methods = [];
-
-        foreach ($tokens as $idx => $token) {
-            if (is_array($token) && $token[0] === 370) {
-                $ir = $idx - 1;
-                while (isset($tokens[$ir]) && $tokens[$ir] !== ';') {
-                    if (is_array($tokens[$ir]) && $tokens[$ir][0] === 397 && $tokens[$ir][1] !== ' ') {
-                        $declaration .= ' ';
-                    } elseif (is_array($tokens[$ir])) {
-                        $declaration .= $tokens[$ir][1];
-                    } else {
-                        $declaration .= $tokens[$ir];
-                    }
-                    $ir--;
-                }
-
-                $i = $idx;
-                while (isset($tokens[$i]) && $tokens[$i] !== '{') {
-                    if (is_array($tokens[$i])) {
-                        $declaration .= $tokens[$i][1];
-                    } else {
-                        $declaration .= $tokens[$i];
-                    }
-                    $i++;
-                }
-                $inTrait = true;
-            } elseif (is_array($token) && $inTrait && in_array($token[0], [362, 361])) {
-                $method = '';
-
-                $ir = $idx - 1;
-                while (isset($tokens[$ir]) && !in_array($tokens[$ir], ['{', '}', ';'])) {
-                    if (is_array($tokens[$ir]) && $tokens[$ir][0] === 393) {
-                    } elseif (is_array($tokens[$ir]) && $tokens[$ir][0] === 397 && $tokens[$ir][1] !== ' ') {
-                        $method .= ' ';
-                    } elseif (is_array($tokens[$ir])) {
-                        $method .= $tokens[$ir][1];
-                    } else {
-                        $method .= $tokens[$ir];
-                    }
-                    $ir--;
-                }
-
-                $i = $idx;
-                while (isset($tokens[$i]) && !in_array($tokens[$i], ['{', ';'])) {
-                    if (is_array($tokens[$i]) && $tokens[$i][0] === 397 && $tokens[$i][1] !== ' ') {
-                        $method .= '';
-                    } elseif (is_array($tokens[$i])) {
-                        $method .= $tokens[$i][1];
-                    } else {
-                        $method .= $tokens[$i];
-                    }
-                    $i++;
-                }
-                $methods[] = str_replace([',', ',  '], [', ', ', '], $method);
-            }
-        }
-
-        $stream = trim($declaration) . self::EOL;
+        $stream = $file -> object() -> declaration() . self::EOL;
         $stream .= '{' . self::EOL;
-        foreach ($methods as $method) {
-            $stream .= self::TAB . trim($method) . self::EOL;
+
+        $members = '';
+        foreach (
+            (new \UT_Php_Core\Collections\Linq($file -> members())) 
+                -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMember $x) {
+                return $x -> declaration();
+            }) -> toArray() as $member
+        ) {
+            $members .= self::TAB . $member -> declaration() . ';' . self::EOL;
         }
+        
+        $methods = '';
+        foreach (
+            (new \UT_Php_Core\Collections\Linq($file -> methods())) 
+                -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMethod $x) {
+                return $x -> declaration();
+            }) -> toArray() as $method
+        ) {
+            $methods .= self::TAB . $method -> declaration() . ';' . self::EOL;
+        }
+        
+        $stream .= $members;
+        if($members !== '' && $methods !== '')
+        {
+            $stream .= self::EOL;
+        }
+        $stream .= $methods;
+        
+        
         $stream .= '}' . self::EOL;
-        return str_replace('  ', ' ', $stream);
+
+        return $stream;
     }
 
     /**
-     * @param array $tokens
+     * @param \UT_Php_Core\Interfaces\IPhpFile $file
      * @return string
      */
-    private function parseClass(array $tokens): string
+    private function parseClass(\UT_Php_Core\Interfaces\IPhpFile $file): string
     {
-        $declaration = '';
-        $inClass = false;
-        $methods = [];
+        $stream = $file -> object() -> declaration() . self::EOL;
+        $stream .= '{' . self::EOL;
 
-        foreach ($tokens as $idx => $token) {
-            if (is_array($token) && $token[0] === 369) {
-                $ir = $idx - 1;
-                while (isset($tokens[$ir]) && $tokens[$ir] !== ';') {
-                    if (is_array($tokens[$ir]) && $tokens[$ir][0] === 397 && $tokens[$ir][1] !== ' ') {
-                        $declaration .= ' ';
-                    } elseif (is_array($tokens[$ir])) {
-                        $declaration .= $tokens[$ir][1];
-                    } else {
-                        $declaration .= $tokens[$ir];
-                    }
-                    $ir--;
-                }
-
-                $i = $idx;
-                while (isset($tokens[$i]) && $tokens[$i] !== '{') {
-                    if (is_array($tokens[$i])) {
-                        $declaration .= $tokens[$i][1];
-                    } else {
-                        $declaration .= $tokens[$i];
-                    }
-                    $i++;
-                }
-                $inClass = true;
-            } elseif (is_array($token) && $inClass && $token[0] === 354) {
-                $i = $idx;
-                $trait = '';
-                while (isset($tokens[$i]) && $tokens[$i] !== ';') {
-                    if (is_array($tokens[$i]) && $tokens[$i][0] === 393) {
-                    } elseif (is_array($tokens[$i]) && $tokens[$i][0] === 397 && $tokens[$i][1] !== ' ') {
-                        $trait .= ' ';
-                    } elseif (is_array($tokens[$i])) {
-                        $trait .= $tokens[$i][1];
-                    } else {
-                        $trait .= $tokens[$i];
-                    }
-                    $i++;
-                }
-                $methods[] = $trait;
-            } elseif (is_array($token) && $inClass && in_array($token[0], [362, 361])) {
-                $method = '';
-
-                $ir = $idx - 1;
-                while (isset($tokens[$ir]) && !in_array($tokens[$ir], ['{', '}', ';'])) {
-                    if (is_array($tokens[$ir]) && $tokens[$ir][0] === 393) {
-                    } elseif (is_array($tokens[$ir]) && $tokens[$ir][0] === 397 && $tokens[$ir][1] !== ' ') {
-                        $method .= ' ';
-                    } elseif (is_array($tokens[$ir])) {
-                        $method .= $tokens[$ir][1];
-                    } else {
-                        $method .= $tokens[$ir];
-                    }
-                    $ir--;
-                }
-
-                $i = $idx;
-                while (isset($tokens[$i]) && !in_array($tokens[$i], ['{', ';'])) {
-                    if (is_array($tokens[$i]) && $tokens[$i][0] === 397 && $tokens[$i][1] !== ' ') {
-                        $method .= '';
-                    } elseif (is_array($tokens[$i])) {
-                        $method .= $tokens[$i][1];
-                    } else {
-                        $method .= $tokens[$i];
-                    }
-                    $i++;
-                }
-                $methods[] = str_replace([',', ',  '], [', ', ', '], $method);
+        $traits = '';
+        foreach (
+            (new \UT_Php_Core\Collections\Linq($file -> traits())) 
+                -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenTrait $x) {
+                return $x -> declaration();
+            }) -> toArray() as $trait
+        ) {
+            $traits .= self::TAB . $trait -> declaration() . ';' . self::EOL;
+        }
+        
+        $members = '';
+        foreach (
+            (new \UT_Php_Core\Collections\Linq($file -> members())) 
+                -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMember $x) {
+                return $x -> declaration();
+            }) -> toArray() as $member
+        ) {
+            if(!$member -> isPrivate())
+            {
+                $members .= self::TAB . $member -> declaration() . ';' . self::EOL;
             }
         }
-
-        $stream = trim($declaration) . self::EOL;
-        $stream .= '{' . self::EOL;
-        foreach ($methods as $method) {
-            $stream .= self::TAB . trim($method) . self::EOL;
+        
+        $methods = '';
+        foreach (
+            (new \UT_Php_Core\Collections\Linq($file -> methods())) 
+                -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMethod $x) {
+                return $x -> declaration();
+            }) -> toArray() as $method
+        ) {
+            if(!$method -> isPrivate())
+            {
+                $methods .= self::TAB . $method -> declaration() . ';' . self::EOL;
+            }
         }
+        
+        $stream .= $traits;
+        if($traits !== '' && $members !== '')
+        {
+            $stream .= self::EOL;
+        }
+        $stream .= $members;
+        if(($members !== '' && $methods !== '') || ($traits !== '' && $methods !== ''))
+        {
+            $stream .= self::EOL;
+        }
+        $stream .= $methods;
         $stream .= '}' . self::EOL;
-        return str_replace('  ', ' ', $stream);
+
+        return $stream;
     }
 
     /**
@@ -308,12 +246,17 @@ class MdBuilder
         $stream .= '{' . self::EOL;
 
         foreach (
-            (new \UT_Php_Core\Collections\Linq($file -> methods())) -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMethod $x) {
+            (new \UT_Php_Core\Collections\Linq($file -> methods())) 
+                -> where(function (\UT_Php_Core\IO\Common\Php\TokenMethod $x) {
+                return !$x -> isPrivate();
+                })
+                -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMethod $x) {
                 return $x -> declaration();
             }) -> toArray() as $method
         ) {
             $stream .= self::TAB . $method -> declaration() . ';' . self::EOL;
         }
+        
         $stream .= '}' . self::EOL;
 
         return $stream;
@@ -327,6 +270,7 @@ class MdBuilder
     {
         $stream = $file -> object() -> declaration() . self::EOL;
         $stream .= '{' . self::EOL;
+        
         foreach (
             (new \UT_Php_Core\Collections\Linq($file -> cases())) -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenCase $x) {
                 return $x -> declaration();
@@ -334,6 +278,7 @@ class MdBuilder
         ) {
             $stream .= self::TAB . $case -> declaration() . ';' . self::EOL;
         }
+        
         $stream .= '}' . self::EOL;
 
         return $stream;
