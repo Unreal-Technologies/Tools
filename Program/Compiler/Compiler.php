@@ -155,7 +155,7 @@ class Compiler
 
             foreach (array_keys($this -> namespaces) as $ns) {
                 $file = $this -> namespaceComposer(null, $ns);
-                $bin = $file -> content();
+                $bin = $file -> read();
 
                 $map['Namespaces'][$ns] = strlen($bin);
                 $map['Stream'] .= $bin;
@@ -317,7 +317,7 @@ class Compiler
      */
     private function translateToNamespace(\UT_Php_Core\IO\File $file): void
     {
-        $stream = $file -> content();
+        $stream = $file -> read();
         $tokens = token_get_all($stream);
 
         $namespace = $this -> getNamespaceFromTokens($tokens);

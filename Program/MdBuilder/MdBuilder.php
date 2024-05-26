@@ -98,22 +98,31 @@ class MdBuilder
             {
                 $this -> itterate($entry);
             }
+            else if($entry instanceof \UT_Php_Core\IO\File && $entry -> extension() === 'php')
+            {
+                $this -> parseFile($entry -> asPhp());
+            }
             else
             {
-                $this -> parseFile($entry);
+                throw new \UT_Php_Core\Exceptions\NotImplementedException('Undefined file "'.$entry -> path().'"');
             }
         }
     }
     
-    private function parseFile(\UT_Php_Core\IO\File $file)
+    /**
+     * @param \UT_Php_Core\Interfaces\IPhpFile $file
+     * @throws \Exception
+     */
+    private function parseFile(\UT_Php_Core\Interfaces\IPhpFile $file)
     {
-        $tokens = token_get_all($file -> content());
+        $tokens = $file -> tokens();
         
-        $ns = $this -> parseNamespace($tokens);
+        $ns = $file -> namespace() -> name();
         if(!isset($this -> data[$ns]))
         {
             $this -> data[$ns] = [];
         }
+        
         $isClass = $this -> isClass($tokens);
         $isInterface = $this -> isInterface($tokens);
         $isEnum = $this -> isEnum($tokens);
@@ -402,39 +411,7 @@ class MdBuilder
         }
         return false;
     }
-    
-    /**
-    * 
-    * @param array $tokens
-    * @return string|null
-    */
-    private function parseNamespace(array $tokens): ?string
-    {
-        $ns = [];
-        $inNs = false;
-        foreach($tokens as $token)
-        {
-            if(is_array($token) && $token[0] === 375)
-            {
-                $inNs = true;
-            }
-            else if(is_array($token) && $inNs && in_array($token[0], [313, 316]))
-            {
-                $ns[] = $token[1];
-            }
-            else if($token === ';' && $inNs)
-            {
-                $inNs = false;
-            }
-        }
-        
-        if(count($ns) === 0)
-        {
-            return null;
-        }
-        return implode('\\', $ns);
-    }
-    
+
     /**
      * @return void
      */
@@ -456,6 +433,6 @@ class MdBuilder
         {
             return \UT_Php_Core\Version::parse('0.0.0.-1');
         }
-        return \UT_Php_Core\Version::parse($versionFile -> content());
+        return \UT_Php_Core\Version::parse($versionFile -> read());
     }
 }
