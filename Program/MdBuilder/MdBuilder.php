@@ -125,8 +125,7 @@ class MdBuilder
         if ($isEnum) {
             $this -> data[$ns][] = $this -> parseEnum($file);
         } elseif ($isInterface) {
-//            print_r($file);
-//            $this -> data[$ns][] = $this -> parseInterface($tokens);
+            $this -> data[$ns][] = $this -> parseInterface($file);
         } elseif ($isClass) {
 //            print_r($file);
 //            $this -> data[$ns][] = $this -> parseClass($tokens);
@@ -300,49 +299,20 @@ class MdBuilder
     }
 
     /**
-     * @param array $tokens
+     * @param \UT_Php_Core\Interfaces\IPhpFile $file
      * @return string
      */
-    private function parseInterface(array $tokens): string
+    private function parseInterface(\UT_Php_Core\Interfaces\IPhpFile $file): string
     {
-        $declaration = '';
-        $inInterface = false;
-        $methods = [];
-
-        foreach ($tokens as $idx => $token) {
-            if (is_array($token) && $token[0] === 371) {
-                $i = $idx;
-                while (isset($tokens[$i]) && $tokens[$i] !== '{') {
-                    if (is_array($tokens[$i])) {
-                        $declaration .= $tokens[$i][1];
-                    } else {
-                        $declaration .= $tokens[$i];
-                    }
-                    $i++;
-                }
-                $inInterface = true;
-            } elseif (is_array($token) && $inInterface && in_array($token[0], [362, 361])) {
-                $method = '';
-
-                $i = $idx;
-                while (isset($tokens[$i]) && $tokens[$i] !== ';') {
-                    if (is_array($tokens[$i]) && $tokens[$i][0] === 397 && $tokens[$i][1] !== ' ') {
-                        $method .= '';
-                    } elseif (is_array($tokens[$i])) {
-                        $method .= $tokens[$i][1];
-                    } else {
-                        $method .= $tokens[$i];
-                    }
-                    $i++;
-                }
-                $methods[] = str_replace([',', ',  '], [', ', ', '], $method);
-            }
-        }
-
-        $stream = $declaration;
+        $stream = $file -> object() -> declaration() . self::EOL;
         $stream .= '{' . self::EOL;
-        foreach ($methods as $method) {
-            $stream .= self::TAB . $method . self::EOL;
+
+        foreach (
+            (new \UT_Php_Core\Collections\Linq($file -> methods())) -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenMethod $x) {
+                return $x -> declaration();
+            }) -> toArray() as $method
+        ) {
+            $stream .= self::TAB . $method -> declaration() . ';' . self::EOL;
         }
         $stream .= '}' . self::EOL;
 
@@ -357,8 +327,12 @@ class MdBuilder
     {
         $stream = $file -> object() -> declaration() . self::EOL;
         $stream .= '{' . self::EOL;
-        foreach ($file -> cases() as $case) {
-            $stream .= self::TAB . $case -> declaration() . self::EOL;
+        foreach (
+            (new \UT_Php_Core\Collections\Linq($file -> cases())) -> orderBy(function (\UT_Php_Core\IO\Common\Php\TokenCase $x) {
+                return $x -> declaration();
+            }) -> toArray() as $case
+        ) {
+            $stream .= self::TAB . $case -> declaration() . ';' . self::EOL;
         }
         $stream .= '}' . self::EOL;
 
