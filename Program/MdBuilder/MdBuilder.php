@@ -111,8 +111,8 @@ class MdBuilder
     
     /**
      * @param \UT_Php_Core\Interfaces\IPhpFile $file
-     * @throws \Exception
-     */
+     * @throws \Exception 
+    */
     private function parseFile(\UT_Php_Core\Interfaces\IPhpFile $file)
     {
         $tokens = $file -> tokens();
@@ -159,7 +159,7 @@ class MdBuilder
     private function parseTrait(array $tokens): string
     {
         $declaration = '';
-        $inClass = false;
+        $inTrait = false;
         $methods = [];
         
         foreach($tokens as $idx => $token)
@@ -197,9 +197,9 @@ class MdBuilder
                     }
                     $i++;
                 }
-                $inClass = true;
+                $inTrait = true;
             }
-            else if(is_array($token) && $inClass && in_array($token[0], [362, 361]))
+            else if(is_array($token) && $inTrait && in_array($token[0], [362, 361]))
             {
                 $method = '';
                 
@@ -299,6 +299,29 @@ class MdBuilder
                     $i++;
                 }
                 $inClass = true;
+            }
+            else if(is_array($token) && $inClass && $token[0] === 354)
+            {
+                $i = $idx;
+                $trait = '';
+                while(isset($tokens[$i]) && $tokens[$i] !== ';')
+                {
+                    if(is_array($tokens[$i]) && $tokens[$i][0] === 393) { }
+                    else if(is_array($tokens[$i]) && $tokens[$i][0] === 397 && $tokens[$i][1] !== ' ')
+                    {
+                        $trait .= ' ';
+                    }
+                    else if(is_array($tokens[$i]))
+                    {
+                        $trait .= $tokens[$i][1];
+                    }
+                    else
+                    {
+                        $trait .= $tokens[$i];
+                    }
+                    $i++;
+                }
+                $methods[] = $trait;
             }
             else if(is_array($token) && $inClass && in_array($token[0], [362, 361]))
             {
