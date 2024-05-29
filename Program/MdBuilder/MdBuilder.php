@@ -100,10 +100,10 @@ class MdBuilder
     }
 
     /**
-     * @param \UT_Php_Core\Interfaces\IPhpFile $file
+     * @param \UT_Php_Core\IO\Common\IPhpFile $file
      * @throws \Exception
     */
-    private function parseFile(\UT_Php_Core\Interfaces\IPhpFile $file)
+    private function parseFile(\UT_Php_Core\IO\Common\IPhpFile $file)
     {
 //        $tokens = $file -> tokens();
 
@@ -134,10 +134,10 @@ class MdBuilder
     }
 
     /**
-     * @param \UT_Php_Core\Interfaces\IPhpFile $file
+     * @param \UT_Php_Core\IO\Common\IPhpFile $file
      * @return string
      */
-    private function parseTrait(\UT_Php_Core\Interfaces\IPhpFile $file): string
+    private function parseTrait(\UT_Php_Core\IO\Common\IPhpFile $file): string
     {
         $stream = $file -> object() -> declaration() . self::EOL;
         $stream .= '{' . self::EOL;
@@ -175,10 +175,10 @@ class MdBuilder
     }
 
     /**
-     * @param \UT_Php_Core\Interfaces\IPhpFile $file
+     * @param \UT_Php_Core\IO\Common\IPhpFile $file
      * @return string
      */
-    private function parseClass(\UT_Php_Core\Interfaces\IPhpFile $file): string
+    private function parseClass(\UT_Php_Core\IO\Common\IPhpFile $file): string
     {
         $stream = $file -> object() -> declaration() . self::EOL;
         $stream .= '{' . self::EOL;
@@ -232,10 +232,10 @@ class MdBuilder
     }
 
     /**
-     * @param \UT_Php_Core\Interfaces\IPhpFile $file
+     * @param \UT_Php_Core\IO\Common\IPhpFile $file
      * @return string
      */
-    private function parseInterface(\UT_Php_Core\Interfaces\IPhpFile $file): string
+    private function parseInterface(\UT_Php_Core\IO\Common\IPhpFile $file): string
     {
         $stream = $file -> object() -> declaration() . self::EOL;
         $stream .= '{' . self::EOL;
@@ -258,10 +258,10 @@ class MdBuilder
     }
 
     /**
-     * @param \UT_Php_Core\Interfaces\IPhpFile $file
+     * @param \UT_Php_Core\IO\Common\IPhpFile $file
      * @return string
      */
-    private function parseEnum(\UT_Php_Core\Interfaces\IPhpFile $file): string
+    private function parseEnum(\UT_Php_Core\IO\Common\IPhpFile $file): string
     {
         $stream = $file -> object() -> declaration() . self::EOL;
         $stream .= '{' . self::EOL;

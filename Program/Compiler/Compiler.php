@@ -48,11 +48,11 @@ class Compiler
         $version = null;
         $versionFile = \UT_Php_Core\IO\File::fromDirectory($dir, '.version');
         if ($versionFile -> exists()) {
-            $version = \UT_Php_Core\Version::parse($versionFile -> content());
+            $version = \UT_Php_Core\Version::parse($versionFile -> read());
             $version -> increment();
         } else {
             $versionFile -> write(self::DEFAULT_VERSION);
-            $version = \UT_Php_Core\Version::parse($versionFile -> content());
+            $version = \UT_Php_Core\Version::parse($versionFile -> read());
         }
 
         $this -> name = $dir -> name();
@@ -280,7 +280,39 @@ class Compiler
             $nullRequirements = array_merge($nullRequirements, $list);
         }
 
-        return $nullRequirements;
+        return $this -> removeDuplicatesKeepFirst($nullRequirements);
+    }
+
+    /**
+     * @param array $input
+     * @return array
+     */
+    private function removeDuplicatesKeepFirst(array $input): array
+    {
+        $inverse = array_reverse($input);
+        $counts = [];
+        foreach ($inverse as $value) {
+            if (!isset($counts[$value])) {
+                $counts[$value] = 0;
+            }
+            $counts[$value]++;
+        }
+        $list = (new \UT_Php_Core\Collections\Linq($counts)) -> toArray(function (int $x) {
+            return $x > 1;
+        }, true);
+        if (count($list) === 0) {
+            return $input;
+        }
+
+        $output = $inverse;
+        foreach ($list as $key => $count) {
+            for ($i = 0; $i < $count - 1; $i++) {
+                $pos = array_search($key, $output);
+                unset($output[$pos]);
+            }
+        }
+
+        return array_reverse(array_values($output));
     }
 
     /**
@@ -295,7 +327,7 @@ class Compiler
             }
 
             if ($entry instanceof \UT_Php_Core\IO\File && $entry -> extension() === 'php') {
-                $this -> translateToNamespace($entry);
+                $this -> translateToNamespace($entry -> asPhp());
             } elseif ($entry instanceof \UT_Php_Core\IO\Directory) {
                 $this -> itterate($entry);
             } else {
@@ -307,532 +339,107 @@ class Compiler
     }
 
     /**
-     * @param \UT_Php_Core\IO\File $file
+     * @param \UT_Php_Core\IO\Common\IPhpFile $file
      * @return void
      */
-    private function translateToNamespace(\UT_Php_Core\IO\File $file): void
+    private function translateToNamespace(\UT_Php_Core\IO\Common\IPhpFile $file): void
     {
-        $stream = $file -> read();
-        $tokens = token_get_all($stream);
-
-        $namespace = $this -> getNamespaceFromTokens($tokens);
-
+        $namespace = $file -> namespace() -> name();
         if (!isset($this -> namespaces[$namespace])) {
-            $this -> namespaces[$namespace] = [];
+            $this -> namespaces[] = [];
         }
 
-        $this -> namespaces[$namespace][$file -> basename()] = [
-            'Requires' => $this -> getNamespaceRequirements($tokens),
-            'Stream' => $this -> obfusicate($tokens)
+        $this -> namespaces[$namespace][$file -> object() -> name()] = [
+            'Requires' => $this -> getNamespaceRequirements($file),
+            'Stream' => $this -> obfusicate($file)
         ];
     }
 
     /**
-     * @param array $tokens
+     * @param \UT_Php_Core\IO\Common\IPhpFile $file
      * @return array
      */
-    private function getNamespaceRequirements(array $tokens): array
+    private function getNamespaceRequirements(\UT_Php_Core\IO\Common\IPhpFile $file): array
     {
+        $list = array_merge($file -> object() -> implements());
+        foreach ($file -> traits() as $trait) {
+            $list[] = $trait -> name();
+        }
+        $extends = $file -> object() -> extends();
+        if ($extends !== null) {
+            $list[] = $extends;
+        }
         $buffer = [];
-        $hasMatch = false;
-
-        foreach ($tokens as $idx => $token) {
-            if (($token[0] === 369 || $token[0] === 371) && !$hasMatch) {
-                $hasMatch = true;
-
-                $extends = null;
-                $interfaces = [];
-
-                $s = $idx + 3;
-                while ($tokens[$idx] !== '{') {
-                    $idx++;
-                }
-                $e = $idx - 1;
-
-                $segment = array_slice($tokens, $s, $e - $s);
-                if (count($segment) !== 0) {
-                    foreach ($segment as $sIdx => $part) {
-                        if (is_array($part) && $part[0] === 373) {
-                            while (isset($segment[$sIdx]) && $segment[$sIdx][0] !== 313) {
-                                $sIdx++;
-                            }
-
-                            if (isset($segment[$sIdx]) && $this -> isSameNamespace($segment[$sIdx][1])) {
-                                $extends = $segment[$sIdx][1];
-                            }
-                        }
-
-                        if (is_array($part) && $part[0] === 374) {
-                            while (isset($segment[$sIdx])) {
-                                if (
-                                    ($segment[$sIdx][0] === 314 || $segment[$sIdx][0] === 313) &&
-                                    $this -> isSameNamespace($segment[$sIdx][1])
-                                ) {
-                                    $interfaces[] = $segment[$sIdx][1];
-                                }
-                                $sIdx++;
-                            }
-                        }
-                    }
-
-                    if ($extends !== null || count($interfaces) !== 0) {
-                        $buffer = $interfaces;
-                        if ($extends !== null) {
-                            $buffer[] = $extends;
-                        }
-                    }
-                }
+        foreach ($list as $cls) {
+            if (stristr($cls, '\\')) { //Is external NS, skip
+                continue;
             }
+            $buffer[] = $cls;
         }
-
-        return $buffer;
+        return array_unique($buffer);
     }
 
     /**
-     * @param string $object
-     * @return bool
-     */
-    private function isSameNamespace(string $object): bool
-    {
-        if ($object[0] === '\\') {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * @param array $tokens
+     * @param \UT_Php_Core\IO\Common\IPhpFile $file
      * @return string
      */
-    private function obfusicate(array $tokens): string
+    private function obfusicate(\UT_Php_Core\IO\Common\IPhpFile $file): string
     {
-        $members = $this -> translateMembers($tokens);
-        $this -> updateMembers($tokens, $members);
+        foreach ($file -> members() as $member) {
+            if ($member -> isPrivate()) {
+                $new = $this -> getNewAddress();
+                $old = $member -> name();
 
-        $constants = $this -> translateConstants($tokens);
-        $this -> updateConstants($tokens, $constants);
-
-        $methods = $this -> translateMethods($tokens);
-        $this -> updatePrivateMethods($tokens, $methods);
-
-        $this -> updateMethods($tokens, $members);
-        $this -> stripInformationAfter($tokens);
-        $this -> stripDocComments($tokens);
-        $this -> stripDocOpenAndNamespace($tokens);
-        $this -> reSpace($tokens);
-
-        return $this -> buildStream($tokens);
-    }
-
-    /**
-     * @param array $tokens
-     * @return array
-     */
-    private function translateMethods(array $tokens): array
-    {
-        $buffer = [];
-
-        $inClass = false;
-
-        foreach ($tokens as $idx => $token) {
-            if (!is_array($token)) {
-            } elseif (!$inClass && $token[0] === 369) {
-                $inClass = true;
-            } elseif (
-                $inClass &&
-                $token[0] === 360 &&
-                $tokens[$idx + 2][0] === 347 &&
-                substr($tokens[$idx + 4][1], 0, 2) !== '__'
-            ) {
-                $method = $tokens[$idx + 4][1];
-                $buffer[$method] = $this -> getNewAddress();
-            }
-        }
-
-        return $buffer;
-    }
-
-    /**
-     * @param array $tokens
-     * @return array
-     */
-    private function translateConstants(array &$tokens): array
-    {
-        $buffer = [];
-
-        $inClass = false;
-        $inMethod = false;
-        $methodDepth = 0;
-
-        $memberStart = -1;
-        foreach ($tokens as $idx => $token) {
-            if (!is_array($token)) {
-                if ($inMethod && $token === '{') {
-                    $methodDepth++;
-                } elseif ($inMethod && $token === '}') {
-                    $methodDepth--;
-                    if ($methodDepth === 0) {
-                        $inMethod = false;
+                $member -> replace($old, '$' . $new);
+                foreach ($file -> methods() as $method) {
+                    $key = $old;
+                    $value = $new;
+                    if ($member -> isStatic()) {
+                        $value = '$' . $value;
+                    } else {
+                        $key = substr($key, 1);
                     }
-                }
-            } elseif (!$inClass && $token[0] === 369) {
-                $inClass = true;
-            } elseif ($inClass && !$inMethod && $token[0] === 347) {
-                $inMethod = true;
-            } elseif ($inClass && !$inMethod && $token[0] === 360) {
-                $isConstant = false;
-                $memberStart = $idx;
-                while ($tokens[$idx][0] !== 313) {
-                    if ($tokens[$idx][0] === 349) {
-                        $isConstant = true;
-                    }
-                    $idx++;
-                }
-
-                if ($isConstant) {
-                    $var = $tokens[$idx][1];
-                    $address = strtoupper($this -> getNewAddress());
-                    $tokens[$idx][1] = $address;
-
-                    $buffer[$var] = $address;
+                    $method -> replace($key, $value, \UT_Php_Core\IO\Common\Php\ReplaceTypes::Member);
                 }
             }
         }
 
-        return $buffer;
-    }
+        foreach ($file -> constants() as $constant) {
+            if ($constant -> isPrivate()) {
+                $new = strtoupper($this -> getNewAddress());
+                $old = $constant -> name();
 
-    /**
-     * @param array $tokens
-     * @param array $constants
-     * @return void
-     */
-    private function updateConstants(array &$tokens, array $constants): void
-    {
-        $remove = [];
-
-        foreach ($tokens as $idx => $token) {
-            if (!is_array($token)) {
-                continue;
-            } elseif ($token[0] == 317) {
-                while (is_array($tokens[$idx]) && $tokens[$idx][0] !== 313) {
-                    if ($tokens[$idx][0] === 397) {
-                        $remove[] = $idx;
-                    }
-                    $idx++;
-                }
-                if (is_array($tokens[$idx]) && isset($constants[$tokens[$idx][1]])) {
-                    $tokens[$idx][1] = $constants[$tokens[$idx][1]];
+                $constant -> replace($old, $new);
+                foreach ($file -> methods() as $method) {
+                    $method -> replace($old, $new, \UT_Php_Core\IO\Common\Php\ReplaceTypes::Constant);
                 }
             }
         }
 
-        foreach ($remove as $idx) {
-            unset($tokens[$idx]);
-        }
-
-        $tokens = array_values($tokens);
-    }
-
-    /**
-     * @param array $tokens
-     * @param array $methods
-     * @return void
-     */
-    private function updatePrivateMethods(array &$tokens, array $methods): void
-    {
-        $remove = [];
-
-        foreach ($tokens as $idx => $token) {
-            if (!is_array($token)) {
-                continue;
-            } elseif ($token[0] == 317) {
-                while (is_array($tokens[$idx]) && $tokens[$idx][0] !== 313) {
-                    if ($tokens[$idx][0] === 397) {
-                        $remove[] = $idx;
-                    }
-                    $idx++;
-                }
-                if (is_array($tokens[$idx]) && isset($methods[$tokens[$idx][1]])) {
-                    $tokens[$idx][1] = $methods[$tokens[$idx][1]];
-                }
-            } elseif ($token[0] == 347) {
-                while (is_array($tokens[$idx]) && $tokens[$idx][0] !== 313) {
-                    if ($tokens[$idx][0] === 397) {
-                        $remove[] = $idx;
-                    }
-                    $idx++;
-                }
-                if (is_array($tokens[$idx]) && isset($methods[$tokens[$idx][1]])) {
-                    $tokens[$idx][1] = $methods[$tokens[$idx][1]];
-                }
+        foreach ($file -> methods() as $method) {
+            foreach ($method -> variables($method -> isPrivate()) as $old) {
+                $new = '$' . $this -> getNewAddress();
+                $method -> replace($old, $new, \UT_Php_Core\IO\Common\Php\ReplaceTypes::Variable);
             }
-        }
-
-        foreach ($remove as $idx) {
-            unset($tokens[$idx]);
-        }
-
-        $tokens = array_values($tokens);
-    }
-
-    /**
-     * @param array $tokens
-     * @return void
-     */
-    private function stripDocComments(array &$tokens): void
-    {
-        $list = [360, 361, 362, 358, 359];
-
-        $remove = [];
-        foreach ($tokens as $idx => $token) {
-            if (
-                is_array($token) &&
-                in_array($token[0], $list) &&
-                $tokens[$idx - 1][0] === 397 &&
-                $tokens[$idx - 2][0] === 393
-            ) {
-                $remove[] = $idx - 1;
-                $remove[] = $idx - 2;
-            }
-        }
-
-        foreach ($remove as $idx) {
-            unset($tokens[$idx]);
-        }
-
-        $tokens = array_values($tokens);
-    }
-
-    /**
-     * @param array $tokens
-     * @return void
-     */
-    private function stripDocOpenAndNamespace(array &$tokens): void
-    {
-        $classStart = (new \UT_Php_Core\Collections\Linq($tokens))
-            ->firstOrDefault(function ($x) {
-                return is_array($x) && ($x[0] === 369 || $x[0] === 372 || $x[0] === 371 || $x[0] === 358);
-            });
-        $classStartIndex = array_search($classStart, $tokens);
-
-        $tokens = array_slice($tokens, $classStartIndex);
-    }
-
-    /**
-     * @param array $tokens
-     * @return void
-     */
-    private function reSpace(array &$tokens): void
-    {
-        $list = [ 'as', 'function', 'instanceof' ];
-
-        foreach ($tokens as $idx => $token) {
-            if (is_array($token) && in_array($token[1], $list)) {
-                $tokens[$idx][1] = ' ' . $token[1] . ' ';
-            }
-        }
-    }
-
-    /**
-     * @param array $tokens
-     * @return void
-     */
-    private function stripInformationAfter(array &$tokens): void
-    {
-        $list = [
-            '{', '}', '(', ')', ';', '=', '.', ':', ',', '?', '+=', '==', '!==', '===',
-            '/', '[', ']', '-', '*', '&&', '+', '->', 'as', '=>', 'function', 'instanceof'
-        ];
-        $remove = [];
-
-        foreach ($tokens as $idx => $token) {
-            if (in_array($token, $list) && is_array($tokens[$idx + 1]) && $tokens[$idx + 1][0] === 397) {
-                $remove[] = $idx + 1;
-            }
-
-            if (in_array($token, $list) && is_array($tokens[$idx - 1]) && $tokens[$idx - 1][0] === 397) {
-                $remove[] = $idx - 1;
-            }
-
-            if (
-                is_array($token) &&
-                in_array($token[1], $list) &&
-                is_array($tokens[$idx + 1]) &&
-                $tokens[$idx + 1][0] === 397
-            ) {
-                $remove[] = $idx + 1;
-            }
-
-            if (
-                is_array($token) &&
-                in_array($token[1], $list) &&
-                is_array($tokens[$idx - 1]) &&
-                $tokens[$idx - 1][0] === 397
-            ) {
-                $remove[] = $idx - 1;
-            }
-        }
-
-        foreach ($remove as $idx) {
-            unset($tokens[$idx]);
-        }
-
-        $tokens = array_values($tokens);
-    }
-
-    /**
-     * @param array $tokens
-     */
-    private function updateMethods(array &$tokens, array $members)
-    {
-        $inMethod = false;
-        $inClass = false;
-        $methodDepth = 0;
-        $inParameters = false;
-        $parameters = [];
-        $replaced = [];
-
-        foreach ($tokens as $idx => $token) {
-            if (!is_array($token)) {
-                if ($inMethod && $token === '{') {
-                    $methodDepth++;
-                } elseif ($inMethod && $token === '}') {
-                    $methodDepth--;
-                    if ($methodDepth === 0) {
-                        $inMethod = false;
-                    }
-                } elseif ($inMethod && $methodDepth === 0 && $token === '(') {
-                    $inParameters = true;
-                    $parameters = [];
-                    $replaced = [];
-                } elseif ($inMethod && $inParameters && $token === ')') {
-                    $inParameters = false;
-                }
-            } elseif (!$inClass && $token[0] === 369) {
-                $inClass = true;
-            } elseif ($inClass && !$inMethod && $token[0] === 347) {
-                $inMethod = true;
-            } elseif ($inParameters && $token[0] === 317) {
-                $parameters[] = $token[1];
-            } elseif (
-                $inMethod &&
-                $methodDepth >= 1 &&
-                $token[0] === 317 &&
-                !in_array($token[1], $parameters) &&
-                $token[1] !== '$this' &&
-                substr($token[1], 0, 2) !== '$_' &&
-                !in_array($token[1], $members)
-            ) {
-                $var = $token[1];
-                if (!isset($replaced[$var])) {
-                    $replaced[$var] = '$' . $this -> getNewAddress();
-                }
-
-                $tokens[$idx][1] = $replaced[$var];
-            }
-        }
-    }
-
-    /**
-     * @param array $tokens
-     * @param array $members
-     * @return void
-     */
-    private function updateMembers(array &$tokens, array $members): void
-    {
-        $remove = [];
-
-        foreach ($tokens as $idx => $token) {
-            if (!is_array($token)) {
-                continue;
-            } elseif ($token[0] == 317) {
-                $i = $idx;
-                while (is_array($tokens[$i]) && $tokens[$i][0] !== 313) {
-                    if ($tokens[$idx][0] === 397) {
-                        $remove[] = $i;
-                    }
-                    $i++;
-                }
-                if (is_array($tokens[$i]) && isset($members[$tokens[$i][1]]) && $tokens[$i + 1] !== '(') {
-                    $tokens[$i][1] = $members[$tokens[$i][1]];
-                } elseif (is_array($token) && isset($members[$token[1]])) {
-                    $tokens[$idx][1] = $members[$token[1]];
-                }
-            }
-        }
-
-        foreach ($remove as $idx) {
-            unset($tokens[$idx]);
-        }
-
-        $tokens = array_values($tokens);
-    }
-
-    /**
-     * @param array $tokens
-     * @return array
-     */
-    private function translateMembers(array &$tokens): array
-    {
-        $buffer = [];
-
-        $inClass = false;
-        $inMethod = false;
-        $methodDepth = 0;
-
-        $memberStart = -1;
-        foreach ($tokens as $idx => $token) {
-            if (!is_array($token)) {
-                if ($inMethod && $token === '{') {
-                    $methodDepth++;
-                } elseif ($inMethod && $token === '}') {
-                    $methodDepth--;
-                    if ($methodDepth === 0) {
-                        $inMethod = false;
-                    }
-                }
-            } elseif (!$inClass && $token[0] === 369) {
-                $inClass = true;
-            } elseif ($inClass && !$inMethod && $token[0] === 347) {
-                $inMethod = true;
-            } elseif ($inClass && !$inMethod && $token[0] === 360) {
-                $isStatic = false;
-                $memberStart = $idx;
-
-                while ($tokens[$idx][0] !== 317) {
-                    if (is_array($tokens[$idx]) && $tokens[$idx][1] === 'static') {
-                        $isStatic = true;
-                    } elseif (is_array($tokens[$idx]) && $tokens[$idx][0] === 347) {
-                        $inMethod = true;
-                        break;
-                    }
-
-                    $idx++;
-                }
-
-                if ($inMethod) {
+            if ($method -> isPrivate()) {
+                $old = $method -> name();
+                if (preg_match('/^\_\_/i', $old)) {
                     continue;
                 }
 
-                $var = $tokens[$idx][1];
-                if (preg_match('/^\$a[0-9a-f]{4}$/i', $var)) {
-                    continue;
-                }
+                $new = $this -> getNewAddress();
 
-                $address = $this -> getNewAddress();
-                $tokens[$idx][1] = '$' . $address;
-
-                if ($isStatic) {
-                    $buffer[$var] = '$' . $address;
-                    continue;
+                $method -> replace($old, $new, \UT_Php_Core\IO\Common\Php\ReplaceTypes::Declaration);
+                foreach ($file -> methods() as $method2) {
+                    $method2 -> replace($old, $new, \UT_Php_Core\IO\Common\Php\ReplaceTypes::Method);
                 }
-                $buffer[substr($var, 1)] = $address;
             }
+            $method -> strip();
         }
 
-        return $buffer;
+        $stream = $file -> compose(true, true);
+
+        return $stream;
     }
 
     /**
@@ -843,55 +450,5 @@ class Compiler
         $new = 'a' . str_pad(dechex($this -> address), 4, '0', STR_PAD_LEFT);
         $this -> address++;
         return $new;
-    }
-
-    /**
-     * @param array $tokens
-     * @return string
-     */
-    private function buildStream(array $tokens): string
-    {
-        $buffer = '';
-        foreach ($tokens as $token) {
-            if (is_array($token)) {
-                $buffer .= $token[1];
-                continue;
-            }
-            $buffer .= $token;
-        }
-
-        return $buffer;
-    }
-
-    /**
-     * @param array $tokens
-     * @return string
-     */
-    private function getNamespaceFromTokens(array $tokens): string
-    {
-        $namespaceStart = (new \UT_Php_Core\Collections\Linq($tokens))
-            -> firstOrDefault(function ($x) {
-                return is_array($x) && $x[1] === 'namespace';
-            });
-        $namespaceStartIndex = array_search($namespaceStart, $tokens);
-
-        $namespaceEnd = (new \UT_Php_Core\Collections\Linq($tokens))
-            -> skip($namespaceStartIndex)
-            -> firstOrDefault(function ($x) {
-                return $x === ';';
-            });
-        $namespaceEndIndex = array_search($namespaceEnd, $tokens);
-
-        $namespaceTokens = array_slice($tokens, $namespaceStartIndex, $namespaceEndIndex - $namespaceStartIndex);
-        $namespaceBuffer = (new \UT_Php_Core\Collections\Linq($namespaceTokens))
-            -> where(function ($x) {
-                return is_array($x) && ($x[0] === 313 || $x[0] === 316);
-            })
-            -> select(function (array $x) {
-                return $x[1];
-            })
-            -> toArray();
-
-        return implode('\\', $namespaceBuffer);
     }
 }
