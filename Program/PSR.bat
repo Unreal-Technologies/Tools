@@ -1,7 +1,7 @@
 @ echo off
 set phpExe="S:\xampp\php\php.exe"
-set phpCbf="Program\phpcs\bin\phpcbf"
-set phpCs="Program\phpcs\bin\phpcs"
+set phpCbf="3rd-pt\phpcs\bin\phpcbf"
+set phpCs="3rd-pt\phpcs\bin\phpcs"
 
 if not exist "Logs" mkdir Logs
 

@@ -1,3 +1,3 @@
 [submodule "phpcs"]
-path = Program/phpcs
+path = 3rd-pt/phpcs
 url = https://github.com/PHPCSStandards/PHP_CodeSniffer
